@@ -32,6 +32,7 @@ using namespace esp_panel::board;
 static String selected = "";
 lv_obj_t *ring[8];
 lv_obj_t *center;
+lv_obj_t *busy = NULL;
 
 const char *result[] = {"S:/Cowboy.png",
                         "S:/Slightly Smiling.png",
@@ -93,6 +94,10 @@ bool post(String emoji) {
       }
 
       https.end();
+      if (busy) {
+        lv_obj_del(busy);
+        busy = NULL;
+      }
     }
 
     delete client;
@@ -147,13 +152,32 @@ static void zoom_out_center() {
   lv_anim_start(&a);
 }
 
+static void post_timer_cb(lv_timer_t *timer) {
+  const char *src = (const char *)timer->user_data;
+
+  post(src);
+}
+
 static void my_event_cb(lv_event_t *event) {
   Serial.println("Event callback triggered");
-  // TODO: mutex to prevent multiple animations
+  // TODO: mutex to prevent multiple callbacks
 
   lv_obj_t *img = (lv_obj_t *)lv_event_get_user_data(event);
+
+  if (busy) {
+    lv_obj_del(busy);
+    busy = NULL;
+  }
+
+  busy = lv_spinner_create(lv_scr_act(), 1000, 80);
+  lv_obj_set_size(busy, 35, 35);
+  lv_obj_align_to(busy, img, LV_ALIGN_CENTER, 0, 0);
+
   const char *src = (const char *)lv_img_get_src(img);
-  post(src);
+  lv_timer_t *timer = lv_timer_create_basic();
+  timer->user_data = (void *)src;
+  lv_timer_set_cb(timer, post_timer_cb);
+  lv_timer_set_repeat_count(timer, 1);
 }
 
 void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
@@ -212,14 +236,7 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
 
 void setup() {
   Serial.begin(115200);
-  delay(2000);
   Serial.println("Starting Setup");
-
-  WiFiManager wifiManager;
-  // wifiManager.setBreakAfterConfig(true);
-  // wifiManager.setSaveConfigCallback(saveConfigCallback);
-  wifiManager.autoConnect("AutoConnectAP");
-  Serial.println("connected...yeey :)");
 
   lv_log_register_print_cb(my_print);
 
@@ -250,12 +267,21 @@ void setup() {
   }
 
   center = lv_img_create(lv_scr_act());
-  lv_obj_align(center, LV_ALIGN_CENTER, 0, 0);
+  // lv_obj_align(center, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_center(center);
   lv_img_set_antialias(center, true);
   lv_img_set_zoom(center, ZOOM_MIN);
 
   /* Release the mutex */
   lvgl_port_unlock();
+
+  // TODO: put label on screen when no wifi connection
+
+  WiFiManager wifiManager;
+  // wifiManager.setBreakAfterConfig(true);
+  // wifiManager.setSaveConfigCallback(saveConfigCallback);
+  wifiManager.autoConnect("AutoConnectAP");
+  Serial.println("connected...yeey :)");
 
   webSocket.beginSSL("websocket.ericbetts.dev", 443);
   webSocket.setReconnectInterval(5000);
