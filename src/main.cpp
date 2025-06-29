@@ -40,37 +40,37 @@ static void anim_size_cb(void *var, int32_t v) {
   lv_obj_set_size((_lv_obj_t *)var, v, v);
 }
 
+static void anim_zoom_cb(void *var, int32_t v) {
+  lv_img_set_zoom((_lv_obj_t *)var, v);
+}
+
 void lv_example_png_1(void) {
   lv_obj_t *img;
 
   img = lv_img_create(lv_scr_act());
-  lv_img_set_src(img, "S:/Cowboy.png");
+  lv_img_set_src(img, "S:/Sunglasses.png");
 
   lv_obj_align(img, LV_ALIGN_CENTER, 0, 0);
   //lv_obj_set_pos(img, 0, 0);
+  //lv_obj_set_size(img, 200, 200); //lv_pct(100), lv_pct(100));
 
   lv_img_set_antialias(img, true);
-  //lv_obj_set_size(img, 200, 200); //lv_pct(100), lv_pct(100));
-  lv_img_set_zoom(img, 256 / 2);
+  // lv_img_set_zoom(img, 256 / 2);
   // lv_img_set_pivot(img, 0, 0);  //To zoom from the left top corner
 
-  /*
   lv_anim_t a;
   lv_anim_init(&a);
   lv_anim_set_var(&a, img);
-  lv_anim_set_values(&a, 100, 200);
+  lv_anim_set_values(&a, LV_IMG_ZOOM_NONE, 256 / 8); // Zoom in and out
 
-  lv_anim_set_time(&a, 1000);
-  lv_anim_set_playback_delay(&a, 100);
-  lv_anim_set_playback_time(&a, 300);
-  lv_anim_set_repeat_delay(&a, 500);
+  lv_anim_set_time(&a, 5000);
+  lv_anim_set_playback_delay(&a, 1000);
+  lv_anim_set_playback_time(&a, 5000);
+  lv_anim_set_repeat_delay(&a, 5000);
   lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
-  lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
-  lv_anim_set_exec_cb(&a, anim_size_cb);
+  lv_anim_set_path_cb(&a, lv_anim_path_linear);
+  lv_anim_set_exec_cb(&a, anim_zoom_cb);
   lv_anim_start(&a);
-  */
-
-
 }
 
 void lv_example_anim_2(void) {
