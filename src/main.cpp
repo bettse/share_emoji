@@ -234,6 +234,14 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
   }
 }
 
+void configModeCallback (WiFiManager *myWiFiManager) {
+  lv_obj_t *label = lv_label_create(lv_scr_act());
+  lv_label_set_text(label, "WiFi Config Mode");
+  lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+  lv_obj_center(label);
+  Serial.println("Entered config mode");
+}
+
 void setup() {
   Serial.begin(115200);
   Serial.println("Starting Setup");
@@ -280,6 +288,7 @@ void setup() {
   WiFiManager wifiManager;
   // wifiManager.setBreakAfterConfig(true);
   // wifiManager.setSaveConfigCallback(saveConfigCallback);
+  wifiManager.setAPCallback(configModeCallback);
   wifiManager.autoConnect("AutoConnectAP");
   Serial.println("connected...yeey :)");
 
