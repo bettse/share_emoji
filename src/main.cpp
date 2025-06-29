@@ -11,7 +11,13 @@
 #include <esp_display_panel.hpp>
 #include <lvgl.h>
 
+#include <ArduinoJson.h> // https://github.com/bblanchon/ArduinoJson
+#include <DNSServer.h>
+#include <HTTPClient.h>
+#include <WebServer.h>
+#include <WebSocketsClient.h>
 #include <WiFi.h>
+#include <WiFiManager.h> //https://github.com/tzapu/WiFiManager
 
 #define SCREEN_WIDTH 360
 #define SCREEN_HEIGHT 360
@@ -42,6 +48,59 @@ int xs[] = {
 int ys[] = {
     SCREEN_HEIGHT / 2 - (300 / 8),  -r45 + (300 / 8), 0, r45 - (300 / 8),
     -SCREEN_HEIGHT / 2 + (300 / 8), r45 - (300 / 8),  0, -r45 + (300 / 8)};
+
+WebSocketsClient webSocket;
+
+bool post(String emoji) {
+  const char update_url[] = "https://sockethook.ericbetts.dev/hook/JC3636W518";
+  String json = String("{\"selected\":\"") + emoji + String("\"}");
+
+  bool result = false;
+  Serial.print("Connecting to server...");
+
+  WiFiClientSecure *client = new WiFiClientSecure;
+  if (client) {
+    client->setInsecure();
+    {
+      // Add a scoping block for HTTPClient https to make sure it is destroyed
+      // before WiFiClientSecure *client is
+      HTTPClient https;
+
+      Serial.print("[HTTPS] begin...\n");
+      https.begin(*client, update_url);
+      https.addHeader("Content-Type", "application/json");
+
+      int httpCode = https.POST(json);
+
+      Serial.print("[HTTPS] POST...\n");
+
+      // httpCode will be negative on error
+      if (httpCode > 0) {
+        // HTTP header has been send and Server response header has been
+        // handled
+        Serial.printf("[HTTPS] GET... code: %d\n", httpCode);
+
+        // file found at server
+        if (httpCode == HTTP_CODE_OK ||
+            httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
+          String payload = https.getString();
+          Serial.println(payload);
+          result = true;
+        }
+      } else {
+        Serial.printf("[HTTPS] POST... failed, error: %s\n",
+                      https.errorToString(httpCode).c_str());
+      }
+
+      https.end();
+    }
+
+    delete client;
+  } else {
+    Serial.println("Unable to create client");
+  }
+  return result;
+}
 
 void my_print(const char *buf) {
   Serial.printf(buf);
@@ -94,43 +153,73 @@ static void my_event_cb(lv_event_t *event) {
 
   lv_obj_t *img = (lv_obj_t *)lv_event_get_user_data(event);
   const char *src = (const char *)lv_img_get_src(img);
-  selected = src ? String(src) : "";
-  Serial.printf("Selected image: %s\n", selected.c_str());
-
-  if (selected.length() > 0) {
-    zoom_out_center();
-  } else {
-    lv_img_set_src(center, selected.c_str());
-    zoom_in_center();
-  }
+  post(src);
 }
 
-void lv_example_anim_2(void) {
-  lv_obj_t *obj = lv_obj_create(lv_scr_act());
-  lv_obj_set_style_bg_color(obj, lv_palette_main(LV_PALETTE_RED), 0);
-  lv_obj_set_style_radius(obj, LV_RADIUS_CIRCLE, 0);
+void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
+  switch (type) {
+  case WStype_DISCONNECTED:
+    Serial.printf("[WSc] Disconnected!\n");
+    break;
+  case WStype_CONNECTED: {
+    Serial.printf("[WSc] Connected to url: %s\n", payload);
 
-  lv_obj_align(obj, LV_ALIGN_LEFT_MID, 10, 0);
-
-  lv_anim_t a;
-  lv_anim_init(&a);
-  lv_anim_set_var(&a, obj);
-  lv_anim_set_values(&a, 10, 50);
-
-  lv_anim_set_time(&a, 1000);
-  lv_anim_set_playback_delay(&a, 100);
-  lv_anim_set_playback_time(&a, 300);
-  lv_anim_set_repeat_delay(&a, 500);
-  lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
-  lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
-
-  lv_anim_set_values(&a, 0, 180);
-  lv_anim_start(&a);
+    StaticJsonDocument<128> doc;
+    doc["action"] = "subscribe";
+    doc["key"] =
+        "105a815ebf0233dc1e784fa47cf9824efc7643d3d7a1c9a4805160279b7d901c";
+    String json;
+    serializeJson(doc, json);
+    webSocket.sendTXT(json);
+  } break;
+  case WStype_TEXT: {
+    if (payload == NULL || length == 0) {
+      return;
+    }
+    Serial.printf("[WSc] get text: %s\n", payload);
+    // StaticJsonDocument<1536> doc;
+    DynamicJsonDocument doc(2048);
+    DeserializationError error = deserializeJson(doc, payload, length);
+    if (error) {
+      Serial.print(F("deserializeJson() failed: "));
+      Serial.println(error.f_str());
+      return;
+    }
+    Serial.printf("[WSc] get json:\n");
+    serializeJsonPretty(doc, Serial);
+    Serial.println("");
+    if (doc["selected"]) {
+      selected = doc["selected"].as<String>();
+      zoom_out_center();
+    }
+    break;
+  }
+  case WStype_BIN:
+    Serial.printf("[WSc] get binary length: %u\n", length);
+    // hexdump(payload, length);
+    break;
+  case WStype_ERROR:
+  case WStype_FRAGMENT_TEXT_START:
+  case WStype_FRAGMENT_BIN_START:
+  case WStype_FRAGMENT:
+  case WStype_FRAGMENT_FIN:
+  case WStype_PING:
+  case WStype_PONG:
+    Serial.printf("[WSc] other event\n");
+    break;
+  }
 }
 
 void setup() {
   Serial.begin(115200);
+  delay(2000);
   Serial.println("Starting Setup");
+
+  WiFiManager wifiManager;
+  // wifiManager.setBreakAfterConfig(true);
+  // wifiManager.setSaveConfigCallback(saveConfigCallback);
+  wifiManager.autoConnect("AutoConnectAP");
+  Serial.println("connected...yeey :)");
 
   lv_log_register_print_cb(my_print);
 
@@ -167,9 +256,22 @@ void setup() {
 
   /* Release the mutex */
   lvgl_port_unlock();
+
+  webSocket.beginSSL("websocket.ericbetts.dev", 443);
+  webSocket.setReconnectInterval(5000);
+  webSocket.onEvent(webSocketEvent);
 }
 
+unsigned long previousMillis = 0;
+unsigned long interval = 1000 * 60 * 5; // 5 minutes
 void loop() {
   lv_timer_handler(); // let LVGL do its work
-  delay(1);
+
+  webSocket.loop();
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis > interval) {
+    previousMillis = currentMillis;
+    // keepalive
+    webSocket.sendTXT("{}");
+  }
 }
