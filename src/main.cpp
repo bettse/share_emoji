@@ -234,7 +234,7 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
   }
 }
 
-void configModeCallback (WiFiManager *myWiFiManager) {
+void configModeCallback(WiFiManager *myWiFiManager) {
   lv_obj_t *label = lv_label_create(lv_scr_act());
   lv_label_set_text(label, "WiFi Config Mode");
   lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
@@ -262,6 +262,8 @@ void setup() {
   Serial.println("Creating UI");
   /* Lock the mutex due to the LVGL APIs are not thread-safe */
   lvgl_port_lock(-1);
+
+  lv_obj_clear_flag(lv_scr_act(), LV_OBJ_FLAG_SCROLLABLE);
 
   for (int i = 0; i < 8; i++) {
     lv_obj_t *img = lv_img_create(lv_scr_act());
